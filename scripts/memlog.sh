@@ -201,7 +201,7 @@ $HITS"
   forget)   python3 "$IDX" forget "$2" $3 ;;
   projects) python3 "$IDX" projects ;;
   prune)    python3 "$IDX" prune $2 $3 ;;
-  ui)       exec "$PY" "$DIR/memview.py" "${2:-37701}" ;;
+  ui)       exec "$PY" "$DIR/memview.py" "${2:-37701}" ${3:+"$3"} ;;   # ui [port] [name,name]
   *)        sed -n '2,16p' "$0"; exit 1 ;;
 esac
 exit 0

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """memview.py — on-demand browser viewer for the memory index (no daemon: runs while you look, Ctrl-C stops it).
 
-  memview.py [port]        default 37701, binds 127.0.0.1 only
+  memview.py [port] [names]   default port 37701, binds 127.0.0.1 only
+  names: comma-separated friendly hostnames (default codingagentmemory.local, or MEMVIEW_NAME). On macOS
+  each *.local name is published through Bonjour (dns-sd, no sudo); on Linux through Avahi if installed.
 Routes: /  (single-page UI)
         /api/projects
         /api/kinds?project=
@@ -16,8 +18,44 @@ from urllib.parse import urlparse, parse_qs
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import memindex as m
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 37701
+import platform, shutil, socket, subprocess, atexit, time
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 37701
+# Friendly names: second argument or MEMVIEW_NAME (comma-separated). Published via Bonjour on macOS
+# (dns-sd, no sudo) or Avahi on Linux; elsewhere a hosts-file line is suggested instead.
+NAMES = [n.strip() for n in (sys.argv[2] if len(sys.argv) > 2 else os.environ.get("MEMVIEW_NAME", "codingagentmemory.local")).split(",") if n.strip()]
 _lock = threading.Lock()
+_publishers = []
+
+def resolves(name, port, tries=1):
+    for _ in range(tries):
+        try:
+            socket.getaddrinfo(name, port); return True
+        except OSError:
+            time.sleep(0.3)
+    return False
+
+def publish_names(port):
+    """Make each friendly name resolve to 127.0.0.1 while the viewer runs. Returns [(name, how|None)]."""
+    out = []
+    for name in NAMES:
+        how = None
+        if resolves(name, port):
+            how = "already resolves"
+        elif platform.system() == "Darwin" and shutil.which("dns-sd") and name.endswith(".local"):
+            p = subprocess.Popen(["dns-sd", "-P", name.rsplit(".", 1)[0], "_http._tcp", "local", str(port), name, "127.0.0.1"],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _publishers.append(p); how = "bonjour" if resolves(name, port, tries=10) else None
+        elif platform.system() == "Linux" and shutil.which("avahi-publish") and name.endswith(".local"):
+            p = subprocess.Popen(["avahi-publish", "-a", "-R", name, "127.0.0.1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _publishers.append(p); how = "avahi" if resolves(name, port, tries=10) else None
+        out.append((name, how))
+    return out
+
+def stop_publishers():
+    for p in _publishers:
+        try: p.terminate()
+        except Exception: pass
+atexit.register(stop_publishers)
 
 def row(r):
     _id, project, ts, kind, title, body = r
@@ -175,8 +213,16 @@ if __name__ == "__main__":
     if srv is None:
         sys.exit(f"could not bind any port in {PORT}..{PORT + 19}")
     url = f"http://127.0.0.1:{port}/"
+    open_url = url
+    for name, how in publish_names(port):
+        if how:
+            friendly = f"http://{name}/" if port == 80 else f"http://{name}:{port}/"
+            print(f"memory viewer at {friendly}  ({how})")
+            if open_url == url: open_url = friendly
+        else:
+            print(f"note: {name} does not resolve here; add '127.0.0.1 {name}' to your hosts file to use it", file=sys.stderr)
     print(f"memory viewer at {url}  (Ctrl-C to stop)")
-    threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    threading.Timer(0.4, lambda: webbrowser.open(open_url)).start()
     try: srv.serve_forever()
     except KeyboardInterrupt: pass
     finally: srv.server_close()

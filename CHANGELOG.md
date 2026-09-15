@@ -12,6 +12,9 @@
   log, and ask for typed observations (discovery, change, feature, bugfix, decision, refactor) alongside the
   session entry. Default cadence is every 5 changes.
 - Viewer: explicit search with three ranking modes, date range, kind chips, snippets, free-port fallback.
+- Viewer reachable at `http://codingagentmemory.local:37701/`: it publishes the name through Bonjour
+  (macOS) or Avahi (Linux) while running, no root needed. `scripts/friendly-url.sh` forwards port 80 for a
+  portless address and prints the Windows hosts-file steps.
 - Offline test suite (`tests/run.sh`), architecture and adapter docs, contributing guide, and a
   step-by-step install guide (`docs/INSTALL.md`). The Claude Code install path was executed end to end:
   marketplace add, plugin install, hooks firing in a headless session.

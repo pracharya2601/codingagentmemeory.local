@@ -17,7 +17,8 @@ All tools share the same memory for a project.
    optional one-time setup. Ranking is hybrid.
 4. **Retrieve.** At session start the agent gets the last checkpoint. On every prompt it gets the top five
    matching entries for the current project, capped to ~1,800 characters. Nothing else is read.
-5. **Browse.** A single-command local viewer with timeline, project, kind and date filters, and search.
+5. **Browse.** A single-command local viewer at `http://codingagentmemory.local:37701/` with timeline,
+   project, kind and date filters, and search. The name is published through Bonjour while it runs; no setup.
 
 The memory is Markdown you can read and edit, in the same folder Claude Code uses for its built-in memory:
 `~/.claude/projects/<project>/memory/`. The index is a derived copy at `~/.claude-memory/index.db`.
@@ -60,7 +61,7 @@ From `scripts/memlog.sh`:
 
 ```bash
 bash scripts/memlog.sh search "stripe webhook signature"   # hybrid search, current project
-bash scripts/memlog.sh ui                                  # viewer at http://127.0.0.1:37701
+bash scripts/memlog.sh ui                                  # viewer at http://codingagentmemory.local:37701/
 bash scripts/memlog.sh projects                            # what is indexed, and whether each folder still exists
 bash scripts/memlog.sh forget ~/old-project --files        # drop a project and its memory folder
 bash scripts/memlog.sh prune                               # dry run: projects whose folder is gone
