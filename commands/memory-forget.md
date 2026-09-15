@@ -1,7 +1,7 @@
 ---
-description: Remove a project from the memory index (and optionally its memory folder), or prune projects whose folder is gone
-argument-hint: [<project path> | --prune] [--files]
-allowed-tools: Bash(bash *memlog.sh projects*), Bash(bash *memlog.sh prune*), Bash(bash *memlog.sh forget*)
+description: "Remove a project from the memory index (and optionally its memory folder), or prune projects whose folder is gone"
+argument-hint: "[<project path> | --prune] [--files]"
+allowed-tools: "Bash(bash *memlog.sh projects*), Bash(bash *memlog.sh prune*), Bash(bash *memlog.sh forget*)"
 ---
 
 Manage what the memory index remembers. Arguments: `$ARGUMENTS`

@@ -1,6 +1,6 @@
 ---
-description: Open the memory viewer in the browser (timeline, filters, hybrid search); Ctrl-C in its terminal stops it
-allowed-tools: Bash(nohup bash *memlog.sh ui*), Bash(bash *memlog.sh ui*)
+description: "Open the memory viewer in the browser (timeline, filters, hybrid search); Ctrl-C in its terminal stops it"
+allowed-tools: "Bash(nohup bash *memlog.sh ui*), Bash(bash *memlog.sh ui*)"
 ---
 
 Start the local memory viewer detached so it keeps running after this turn, then tell the user the URL.

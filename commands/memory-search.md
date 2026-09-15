@@ -1,7 +1,7 @@
 ---
-description: Search this project's memory index (hybrid keyword + meaning) and summarize what's relevant
-argument-hint: <what you're looking for>
-allowed-tools: Bash(bash *memlog.sh search*)
+description: "Search this project's memory index (hybrid keyword + meaning) and summarize what's relevant"
+argument-hint: "<what you're looking for>"
+allowed-tools: "Bash(bash *memlog.sh search*)"
 ---
 
 Search the local memory index for the current project and report what's relevant.
