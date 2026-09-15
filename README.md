@@ -10,20 +10,21 @@ All tools share the same memory for a project.
 ## How it works
 
 1. **Capture.** Hooks log every prompt, file edit, and state-changing command to per-project Markdown day logs.
-2. **Checkpoint.** Every 5 changes, the agent that did the work pauses for one short turn and is handed the
-   exact list of files it changed. It writes a session entry (files, learned, completed, next steps) and 1-6
-   typed observations: `discovery`, `change`, `feature`, `bugfix`, `decision`, `refactor`.
+2. **Checkpoint.** Every 5 changes, the agent that did the work is handed the exact list of files it changed
+   and writes a session entry (files, learned, completed, next steps) plus 1-6 typed observations:
+   `discovery`, `change`, `feature`, `bugfix`, `decision`, `refactor`. Delivered quietly at the start of
+   the next prompt; nothing is printed in the terminal.
 3. **Index.** Everything lands in one SQLite file: full-text search (BM25) always, vector search after an
    optional one-time setup. Ranking is hybrid.
 4. **Retrieve.** At session start the agent gets the last checkpoint. On every prompt it gets the top five
    matching entries for the current project, capped to ~1,800 characters. Nothing else is read.
-5. **Browse.** A single-command local viewer at `http://codingagentmemory.local:37701/` with timeline,
-   project, kind and date filters, and search. The name is published through Bonjour while it runs; no setup.
+5. **Browse.** A local viewer at `http://codingagentmemory.local/` with timeline, project, kind and date
+   filters, and search.
 
 The memory is Markdown you can read and edit, in the same folder Claude Code uses for its built-in memory:
 `~/.claude/projects/<project>/memory/`. The index is a derived copy at `~/.claude-memory/index.db`.
 
-## Install for Claude Code
+## Install (Claude Code)
 
 ```bash
 claude plugin marketplace add pracharya2601/codingagentmemeory.local
@@ -31,7 +32,7 @@ claude plugin install local-memory@local-memory
 ```
 
 Requirements: `jq` (ships with macOS 15+; otherwise `brew install jq` / `apt install jq`) and `python3`.
-Keyword search works immediately. Hooks load on the next session you start. For semantic search, run once:
+Start a new session and it's on. Keyword search works immediately; for semantic search run once:
 
 ```bash
 bash ~/.claude/plugins/cache/local-memory/local-memory/*/scripts/setup.sh
@@ -40,32 +41,105 @@ bash ~/.claude/plugins/cache/local-memory/local-memory/*/scripts/setup.sh
 That creates `~/.claude-memory/venv` (about 150 MB: `sqlite-vec`, `fastembed`), downloads a 64 MB embedding
 model, and embeds what is already indexed.
 
-Slash commands: `/memory-search <text>`, `/memory-ui`, `/memory-forget`.
+Other tools: clone the repo and follow the README in `adapters/<tool>/`. Full details, verification steps and
+troubleshooting: `docs/INSTALL.md`.
 
-## Install for other tools
+## Using it day to day
 
-Clone the repo, then follow the README in the adapter folder:
+### Nothing to do, mostly
 
-| Tool | Folder | Mechanism |
-|---|---|---|
-| Cursor | `adapters/cursor` | hooks for capture and checkpoints, MCP for retrieval |
-| Codex CLI | `adapters/codex` | `notify` for capture, MCP for retrieval and checkpoints |
-| Gemini CLI | `adapters/gemini` | hooks for everything, MCP optional |
-| OpenCode | `adapters/opencode` | plugin for everything, MCP optional |
-| Pi | `adapters/pi` | extension for everything |
-| Anything with MCP | `scripts/mcp_server.py` + `adapters/AGENTS-snippet.md` | retrieval and checkpoints without hooks |
+Work as usual. In every project you'll notice three things:
 
-## Command line
+- **Session start:** "Where this project was left" with the last checkpoint's next steps.
+- **On prompts:** "Relevant past memory for this project" with up to five matching entries when there are any.
+- **After every 5 logged changes:** at the start of your next prompt the agent first appends a checkpoint to
+  `session-log.md` and `observations.md`, then handles your request. You'll see two small file writes.
 
-From `scripts/memlog.sh`:
+If you want the agent to remember something specific, just say so ("remember that we deploy from `main`
+only"). It writes a memory file and adds it to the project's `MEMORY.md` index.
+
+### Slash commands
+
+| Command | What it does |
+|---|---|
+| `/memory-search <text>` | Hybrid search of this project's memory, summarized. Example: `/memory-search why did we switch to token buckets` |
+| `/memory-ui` | Opens the viewer in your browser. Reuses a running instance rather than starting another. |
+| `/memory-forget` | Lists what's indexed and whether each project's folder still exists. |
+| `/memory-forget --prune` | Dry run of removing projects whose folder is gone; applies only after you confirm. |
+| `/memory-forget <path> [--files]` | Removes one project from the index, and its Markdown memory folder with `--files`. Asks first. |
+
+If another plugin uses the same command names, the namespaced form always works: `/local-memory:memory-ui`.
+
+### The viewer
+
+`/memory-ui` opens `http://codingagentmemory.local:37701/`. The name needs no setup on macOS (the viewer
+announces it through Bonjour while running), one `hosts` line on Windows, and the `avahi-utils` package on
+Linux.
+
+To drop the port, once per machine (asks for your password once, survives reboots):
 
 ```bash
-bash scripts/memlog.sh search "stripe webhook signature"   # hybrid search, current project
-bash scripts/memlog.sh ui                                  # viewer at http://codingagentmemory.local:37701/
-bash scripts/memlog.sh projects                            # what is indexed, and whether each folder still exists
-bash scripts/memlog.sh forget ~/old-project --files        # drop a project and its memory folder
-bash scripts/memlog.sh prune                               # dry run: projects whose folder is gone
+bash ~/.claude/plugins/cache/local-memory/local-memory/*/scripts/friendly-url.sh install
 ```
+
+Then it's `http://codingagentmemory.local/`. The viewer keeps running until you stop it:
+
+```bash
+pkill -f memview.py
+```
+
+In the viewer: pick a project in the sidebar, type and press Enter to search (choose hybrid, keywords only, or
+meaning only), narrow by kind chips and date range, click a card to expand it.
+
+### From the shell
+
+The same operations without Claude, from inside a project directory:
+
+```bash
+M=~/.claude/plugins/cache/local-memory/local-memory/*/scripts/memlog.sh
+bash $M search "stripe webhook signature"   # ranked search for this project
+bash $M ui                                  # start the viewer (Ctrl-C stops it)
+bash $M projects                            # every indexed project, with folder status
+bash $M prune                               # dry run: projects whose folder is gone
+bash $M prune --apply --files               # remove them, including their memory folders
+bash $M forget ~/old-project --files        # remove one project
+```
+
+An alias saves typing: `alias mem='bash ~/.claude/plugins/cache/local-memory/local-memory/*/scripts/memlog.sh'`.
+
+### Cleaning up old memory
+
+- **A project you deleted:** `/memory-forget --prune` finds it and removes it after you confirm. Nothing is
+  pruned automatically, and projects whose path the index doesn't know are never touched.
+- **A memory that's wrong:** edit or delete the Markdown file under `~/.claude/projects/<project>/memory/`
+  and remove its line from `MEMORY.md`. The index follows on the next stop.
+- **Everything:** `rm -rf ~/.claude-memory` drops the index, the model and the Python environment. Your
+  Markdown memory folders stay; re-running `setup.sh` rebuilds the index from them.
+
+### Where the files are
+
+```
+~/.claude/projects/<project-slug>/memory/
+  MEMORY.md          short index, one line per memory (loaded every session)
+  session-log.md     checkpoints: request, files, learned, completed, next steps
+  observations.md    typed one-liners written at checkpoints
+  log/YYYY-MM-DD.md  raw activity: prompts, edits, commands, checkpoint boundaries
+  *.md               durable memories the agent or you wrote
+~/.claude-memory/
+  index.db           SQLite: full-text + vector index over all of the above
+  venv/ models/      optional, from setup.sh
+```
+
+The project slug is the project's absolute path with every non-alphanumeric character replaced by `-`.
+
+### Updating and removing the plugin
+
+```bash
+claude plugin marketplace update local-memory && claude plugin update local-memory@local-memory
+claude plugin uninstall local-memory@local-memory      # memory folders and index are left in place
+```
+
+Restart sessions after an update so they load the new files.
 
 ## Configuration
 
@@ -74,6 +148,7 @@ bash scripts/memlog.sh prune                               # dry run: projects w
 | `MEMLOG_SUMMARY_EVERY` | `5` | logged changes between checkpoints |
 | `MEMLOG_RETRIEVE_N` | `5` | entries injected per prompt |
 | `MEMLOG_CHECKPOINT_MODE` | `quiet` | `quiet`: checkpoint delivered silently on the next prompt; `block`: agent held at stop (Claude Code prints the request in the terminal) |
+| `MEMVIEW_NAME` | `codingagentmemory.local` | name(s) the viewer publishes, comma-separated |
 | `MEMINDEX_NOVEC` | unset | `1` forces keyword-only ranking |
 | `MEMINDEX_DB` | `~/.claude-memory/index.db` | index location |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | where per-project memory folders live |
