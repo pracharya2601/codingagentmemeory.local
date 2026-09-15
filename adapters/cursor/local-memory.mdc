@@ -1,0 +1,13 @@
+---
+description: Use the local-memory MCP tools to recall and record project memory
+alwaysApply: true
+---
+
+This project has persistent local memory exposed through the `local-memory` MCP server.
+
+- At the start of each task, call `memory_context` with the user's request. It returns where the project was
+  left, past entries relevant to the task, and sometimes a checkpoint request.
+- If `memory_context` says a checkpoint is due, call `memory_checkpoint` before you finish the task, with the
+  exact files you changed and 1-6 typed observations (discovery, change, feature, bugfix, decision, refactor).
+- When you need history on a specific topic, call `memory_search`.
+- Treat retrieved memory as a lead, not as truth: verify against the repository before acting on it.

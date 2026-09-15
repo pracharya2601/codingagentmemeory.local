@@ -1,66 +1,82 @@
 # local-memory
 
-Persistent, searchable memory for [Claude Code](https://claude.com/claude-code) that runs entirely on your
-Claude subscription. No background worker, no second model, no API keys, no cloud.
+Persistent, searchable memory for coding agents that runs entirely on your machine and your existing
+subscription. No background worker, no second model, no API keys, no cloud.
 
-- **Capture.** Hooks log every prompt, file edit, and state-changing command to per-project Markdown day logs.
-- **Observe.** Every 5 changes your *own session* pauses for one short turn and writes a checkpoint: a
-  session entry (files touched, learned, completed, next steps) plus typed observations
-  (`discovery`, `change`, `feature`, `bugfix`, `decision`, `refactor`).
-- **Index.** Everything lands in one SQLite file with full-text search (BM25) and, after an optional setup,
-  vector search (sqlite-vec + a local bge-small model). Ranking is hybrid via reciprocal rank fusion.
-- **Retrieve.** At session start Claude gets the last checkpoint. On every prompt it gets the top five
-  matching entries for the current project, capped to ~1,800 characters. Nothing else is read.
-- **Browse.** `/memory-ui` opens an on-demand local viewer with a timeline, project/kind/date filters, and
-  hybrid search. It stops when you close it.
+Works with **Claude Code** (verified), and ships adapters for **Cursor, Codex CLI, Gemini CLI, OpenCode,
+and Pi** (written against their extension references, awaiting field reports — see `docs/ADAPTERS.md`).
+All tools share the same memory for a project.
 
-Everything stays on disk under `~/.claude/projects/<project>/memory/` (Markdown you can edit) and
-`~/.claude-memory/index.db` (the derived search index).
+## How it works
 
-## Install
+1. **Capture.** Hooks log every prompt, file edit, and state-changing command to per-project Markdown day logs.
+2. **Checkpoint.** Every 5 changes, the agent that did the work pauses for one short turn and is handed the
+   exact list of files it changed. It writes a session entry (files, learned, completed, next steps) and 1-6
+   typed observations: `discovery`, `change`, `feature`, `bugfix`, `decision`, `refactor`.
+3. **Index.** Everything lands in one SQLite file: full-text search (BM25) always, vector search after an
+   optional one-time setup. Ranking is hybrid.
+4. **Retrieve.** At session start the agent gets the last checkpoint. On every prompt it gets the top five
+   matching entries for the current project, capped to ~1,800 characters. Nothing else is read.
+5. **Browse.** A single-command local viewer with timeline, project, kind and date filters, and search.
+
+The memory is Markdown you can read and edit, in the same folder Claude Code uses for its built-in memory:
+`~/.claude/projects/<project>/memory/`. The index is a derived copy at `~/.claude-memory/index.db`.
+
+## Install for Claude Code
 
 ```bash
 claude plugin marketplace add <your-github-user>/claude-local-memory
 claude plugin install local-memory@local-memory
 ```
 
-Requirements: `jq` and `python3` (both standard on macOS; `apt install jq` on Debian/Ubuntu).
-Keyword search works immediately. For semantic search, run once:
+Requirements: `jq` and `python3`. Keyword search works immediately. For semantic search, run once:
 
 ```bash
 bash ~/.claude/plugins/cache/local-memory/local-memory/*/scripts/setup.sh
 ```
 
-It creates `~/.claude-memory/venv` (about 150 MB with `sqlite-vec` and `fastembed`), downloads the
-64 MB embedding model, and embeds what is already indexed. `uv` is used if present, otherwise `python3 -m venv`.
+That creates `~/.claude-memory/venv` (about 150 MB: `sqlite-vec`, `fastembed`), downloads a 64 MB embedding
+model, and embeds what is already indexed.
 
-## Commands
+Slash commands: `/memory-search <text>`, `/memory-ui`, `/memory-forget`.
 
-| Command | What it does |
-|---|---|
-| `/memory-search <text>` | Hybrid search of the current project's memory, summarized by Claude |
-| `/memory-ui` | Start the browser viewer at http://127.0.0.1:37701 |
-| `/memory-forget [path \| --prune] [--files]` | Remove a project from the index, or prune projects whose folder is gone |
+## Install for other tools
 
-The same operations are available from the shell via `scripts/memlog.sh`:
-`search`, `projects`, `forget`, `prune`, `ui`.
+Clone the repo, then follow the README in the adapter folder:
+
+| Tool | Folder | Mechanism |
+|---|---|---|
+| Cursor | `adapters/cursor` | hooks for capture and checkpoints, MCP for retrieval |
+| Codex CLI | `adapters/codex` | `notify` for capture, MCP for retrieval and checkpoints |
+| Gemini CLI | `adapters/gemini` | hooks for everything, MCP optional |
+| OpenCode | `adapters/opencode` | plugin for everything, MCP optional |
+| Pi | `adapters/pi` | extension for everything |
+| Anything with MCP | `scripts/mcp_server.py` + `adapters/AGENTS-snippet.md` | retrieval and checkpoints without hooks |
+
+## Command line
+
+From `scripts/memlog.sh`:
+
+```bash
+bash scripts/memlog.sh search "stripe webhook signature"   # hybrid search, current project
+bash scripts/memlog.sh ui                                  # viewer at http://127.0.0.1:37701
+bash scripts/memlog.sh projects                            # what is indexed, and whether each folder still exists
+bash scripts/memlog.sh forget ~/old-project --files        # drop a project and its memory folder
+bash scripts/memlog.sh prune                               # dry run: projects whose folder is gone
+```
 
 ## Configuration
 
-Environment variables, set in your shell or in `settings.json` under `env`:
-
 | Variable | Default | Meaning |
 |---|---|---|
-| `MEMLOG_SUMMARY_EVERY` | `5` | Logged changes between checkpoints |
-| `MEMLOG_RETRIEVE_N` | `5` | Entries injected per prompt |
-| `MEMINDEX_NOVEC` | unset | Set to `1` to force keyword-only ranking |
-| `MEMINDEX_DB` | `~/.claude-memory/index.db` | Index location |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | Honoured for the project memory folders |
+| `MEMLOG_SUMMARY_EVERY` | `5` | logged changes between checkpoints |
+| `MEMLOG_RETRIEVE_N` | `5` | entries injected per prompt |
+| `MEMINDEX_NOVEC` | unset | `1` forces keyword-only ranking |
+| `MEMINDEX_DB` | `~/.claude-memory/index.db` | index location |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | where per-project memory folders live |
+| `MEMORY_PROJECT_DIR` | server cwd | project for the MCP server |
 
-## How a checkpoint works
-
-After the fifth logged change, the next time Claude finishes a turn the Stop hook holds it for one more
-step and hands it the exact list of files and commands from that window. Claude appends:
+## What a checkpoint looks like
 
 ```markdown
 ## 2026-09-15 11:13 — wire stripe webhook signature check
@@ -70,8 +86,6 @@ step and hands it the exact list of files and commands from that window. Claude 
 **Next steps:** add replay protection
 ```
 
-and, to `observations.md`:
-
 ```markdown
 ## 2026-09-15 11:13
 - [bugfix] Webhook signature failed on parsed body — stripe_webhook.ts now hashes the raw request body
@@ -79,34 +93,26 @@ and, to `observations.md`:
 ```
 
 Each observation line becomes its own indexed, embedded entry with its type as the kind.
-A `### checkpoint` marker is also written into the day log so raw activity reads as windows.
 
 ## Migrating from claude-mem
-
-If you have a claude-mem database, import it once:
 
 ```bash
 python3 scripts/memindex.py seed ~/.claude-mem/claude-mem.db
 ```
 
-Projects are matched by name to `~/.claude/projects/*`. For names that cannot be matched automatically,
-set `MEMINDEX_SEED_OVERRIDES='{"name": "-Users-you-path-slug"}'`.
+## Why not an observer model
 
-## Why not a background observer
-
-Observer-style memory tools run a second model over your tool output. That doubles your usage and adds
-a daemon that can fail. Here the session that did the work writes the memory, at a cadence you choose,
-with full context of why it did what it did. The trade-off is that memories are written in batches of
+Observer-style memory runs a second model over your tool output after every call. That doubles usage and
+adds a daemon that can fail or exhaust your quota. Here the session that did the work writes the memory, with
+full context of why, at a cadence you choose. The trade-off is batching: memories are written every few
 changes rather than after every tool call.
 
-## Uninstall
+## Docs
 
-```bash
-claude plugin uninstall local-memory@local-memory
-```
-
-Your Markdown memory folders are left in place. Delete `~/.claude-memory` to drop the index, model, and
-Python environment.
+- `docs/ARCHITECTURE.md` — storage layout, ranking, how checkpoints are delivered per tool
+- `docs/ADAPTERS.md` — support matrix and how to add an adapter
+- `docs/TESTING.md` — offline suite and how to verify an adapter in its tool
+- `CONTRIBUTING.md`, `CHANGELOG.md`
 
 ## License
 

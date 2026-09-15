@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "bash /ABSOLUTE/PATH/TO/claude-local-memory/adapters/gemini/gemini-hook.sh SessionStart", "timeout": 10 } ] }
+    ],
+    "BeforeAgent": [
+      { "hooks": [ { "type": "command", "command": "bash /ABSOLUTE/PATH/TO/claude-local-memory/adapters/gemini/gemini-hook.sh BeforeAgent", "timeout": 10 } ] }
+    ],
+    "AfterTool": [
+      { "matcher": "write_file|replace|run_shell_command", "hooks": [ { "type": "command", "command": "bash /ABSOLUTE/PATH/TO/claude-local-memory/adapters/gemini/gemini-hook.sh AfterTool", "timeout": 5 } ] }
+    ],
+    "AfterAgent": [
+      { "hooks": [ { "type": "command", "command": "bash /ABSOLUTE/PATH/TO/claude-local-memory/adapters/gemini/gemini-hook.sh AfterAgent", "timeout": 15 } ] }
+    ]
+  },
+  "mcpServers": {
+    "local-memory": {
+      "command": "python3",
+      "args": ["/ABSOLUTE/PATH/TO/claude-local-memory/scripts/mcp_server.py"]
+    }
+  }
+}

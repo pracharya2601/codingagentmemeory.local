@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      { "command": "bash /ABSOLUTE/PATH/TO/claude-local-memory/adapters/cursor/cursor-hook.sh beforeSubmitPrompt" }
+    ],
+    "afterFileEdit": [
+      { "command": "bash /ABSOLUTE/PATH/TO/claude-local-memory/adapters/cursor/cursor-hook.sh afterFileEdit" }
+    ],
+    "afterShellExecution": [
+      { "command": "bash /ABSOLUTE/PATH/TO/claude-local-memory/adapters/cursor/cursor-hook.sh afterShellExecution" }
+    ],
+    "stop": [
+      { "command": "bash /ABSOLUTE/PATH/TO/claude-local-memory/adapters/cursor/cursor-hook.sh stop" }
+    ]
+  }
+}
