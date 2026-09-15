@@ -26,7 +26,7 @@ The memory is Markdown you can read and edit, in the same folder Claude Code use
 ## Install for Claude Code
 
 ```bash
-claude plugin marketplace add <your-github-user>/claude-local-memory
+claude plugin marketplace add pracharya2601/codingagentmemeory.local
 claude plugin install local-memory@local-memory
 ```
 

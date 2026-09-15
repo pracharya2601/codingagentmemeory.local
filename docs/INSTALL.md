@@ -26,7 +26,7 @@ works too. Roughly 150 MB for the environment plus a 64 MB model download, one t
 ### 1. Install the plugin
 
 ```bash
-claude plugin marketplace add <github-user>/claude-local-memory
+claude plugin marketplace add pracharya2601/codingagentmemeory.local
 claude plugin install local-memory@local-memory
 ```
 
