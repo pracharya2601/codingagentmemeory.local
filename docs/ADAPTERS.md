@@ -15,7 +15,7 @@ the MCP server fills the gap.
 | Last checkpoint at session start | hook | MCP | MCP | hook | via retrieval | extension |
 | Checkpoint delivery | Stop hook holds the agent | `followup_message` | MCP `memory_context` | AfterAgent holds the agent | follow-up prompt | `sendUserMessage` |
 | Viewer | `/memory-ui` | CLI | CLI | CLI | CLI | CLI |
-| **Verification status** | **verified in daily use** | untested | untested | untested | untested | untested |
+| **Verification status** | **verified: marketplace install, hooks firing in a real session, checkpoints in daily use** | untested | untested | untested | untested | untested |
 
 "Untested" means: written against that tool's published extension reference, translator exercised with
 synthetic payloads in this repo's test script, JavaScript and TypeScript syntax-checked, but not yet run

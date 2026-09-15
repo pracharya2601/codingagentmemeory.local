@@ -29,7 +29,8 @@ claude plugin marketplace add <your-github-user>/claude-local-memory
 claude plugin install local-memory@local-memory
 ```
 
-Requirements: `jq` and `python3`. Keyword search works immediately. For semantic search, run once:
+Requirements: `jq` (ships with macOS 15+; otherwise `brew install jq` / `apt install jq`) and `python3`.
+Keyword search works immediately. Hooks load on the next session you start. For semantic search, run once:
 
 ```bash
 bash ~/.claude/plugins/cache/local-memory/local-memory/*/scripts/setup.sh
@@ -109,6 +110,7 @@ changes rather than after every tool call.
 
 ## Docs
 
+- `docs/INSTALL.md` — step-by-step install, verification, troubleshooting, and uninstall for every tool
 - `docs/ARCHITECTURE.md` — storage layout, ranking, how checkpoints are delivered per tool
 - `docs/ADAPTERS.md` — support matrix and how to add an adapter
 - `docs/TESTING.md` — offline suite and how to verify an adapter in its tool

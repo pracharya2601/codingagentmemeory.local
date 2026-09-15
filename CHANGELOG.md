@@ -12,7 +12,9 @@
   log, and ask for typed observations (discovery, change, feature, bugfix, decision, refactor) alongside the
   session entry. Default cadence is every 5 changes.
 - Viewer: explicit search with three ranking modes, date range, kind chips, snippets, free-port fallback.
-- Offline test suite (`tests/run.sh`), architecture and adapter docs, contributing guide.
+- Offline test suite (`tests/run.sh`), architecture and adapter docs, contributing guide, and a
+  step-by-step install guide (`docs/INSTALL.md`). The Claude Code install path was executed end to end:
+  marketplace add, plugin install, hooks firing in a headless session.
 - Fixed: a single-line join dropped its only line on BSD sed; CLI modes blocked on stdin in a terminal;
   observations file was indexed twice.
 
