@@ -9,7 +9,7 @@
       "name": "local-memory",
       "source": "./",
       "description": "Persistent, searchable memory for Claude Code on your subscription only: hook-based capture, checkpoint observations, local SQLite hybrid search, on-demand browser viewer.",
-      "version": "0.2.0"
+      "version": "0.2.1"
     }
   ]
 }

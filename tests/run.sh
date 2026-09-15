@@ -44,6 +44,16 @@ check "prompt hook injects context"         'jq -nc --arg c "$T" "{cwd:\$c, prom
 check "start hook injects last entry"       'jq -nc --arg c "$T" "{cwd:\$c}" | bash "$H" start | jq -r ".hookSpecificOutput.additionalContext" | grep -q "wire limiter"'
 STOP_OUT=$(jq -nc --arg c "$T" '{cwd:$c, stop_hook_active:false}' | bash "$H" stop)
 check "stop hook silent when not due"       '[ -z "$STOP_OUT" ]'
+for f in q1 q2 q3 q4 q5; do bash "$H" edit "$T" "$T/$f.go" >/dev/null; done
+STOP_OUT=$(jq -nc --arg c "$T" '{cwd:$c, stop_hook_active:false}' | bash "$H" stop)
+check "quiet mode: stop prints nothing when due" '[ -z "$STOP_OUT" ]'
+check "quiet mode: checkpoint stored as pending" 'grep -q "q1.go, q2.go" "$M/.checkpoint-pending.md"'
+PROMPT_OUT=$(jq -nc --arg c "$T" '{cwd:$c, prompt:"now refactor the parser module please"}' | bash "$H" prompt | jq -r ".hookSpecificOutput.additionalContext")
+check "quiet mode: next prompt carries the checkpoint" 'printf "%s" "$PROMPT_OUT" | grep -q "Before handling the request below" && printf "%s" "$PROMPT_OUT" | grep -q "q3.go"'
+check "quiet mode: pending cleared after delivery" '[ ! -f "$M/.checkpoint-pending.md" ]'
+for f in b1 b2 b3 b4 b5; do bash "$H" edit "$T" "$T/$f.go" >/dev/null; done
+BLOCK_OUT=$(jq -nc --arg c "$T" '{cwd:$c, stop_hook_active:false}' | MEMLOG_CHECKPOINT_MODE=block bash "$H" stop)
+check "block mode: stop returns decision block" 'printf "%s" "$BLOCK_OUT" | jq -e ".decision == \"block\"" >/dev/null && [ ! -f "$M/.checkpoint-pending.md" ]'
 
 echo "adapters"
 A="$ROOT/adapters"

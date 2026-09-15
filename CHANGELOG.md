@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 — 2026-09-15
+
+- Checkpoints are now delivered quietly by default: the Stop hook stores the request and the next prompt
+  injects it as context, so Claude Code no longer prints the whole request as a "Stop hook error".
+  `MEMLOG_CHECKPOINT_MODE=block` restores the previous behaviour. A request left over when a session ends is
+  delivered at the next session start with a note to reconstruct from the day log.
+
 ## 0.2.0 — 2026-09-15
 
 - Core split from the Claude Code plugin: `scripts/memlog.sh` gains argument-based modes (`note`, `edit`,

@@ -73,6 +73,7 @@ bash scripts/memlog.sh prune                               # dry run: projects w
 |---|---|---|
 | `MEMLOG_SUMMARY_EVERY` | `5` | logged changes between checkpoints |
 | `MEMLOG_RETRIEVE_N` | `5` | entries injected per prompt |
+| `MEMLOG_CHECKPOINT_MODE` | `quiet` | `quiet`: checkpoint delivered silently on the next prompt; `block`: agent held at stop (Claude Code prints the request in the terminal) |
 | `MEMINDEX_NOVEC` | unset | `1` forces keyword-only ranking |
 | `MEMINDEX_DB` | `~/.claude-memory/index.db` | index location |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | where per-project memory folders live |

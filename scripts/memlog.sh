@@ -25,6 +25,10 @@ python3() { "$PY" "$@"; }
 
 SUMMARY_EVERY=${MEMLOG_SUMMARY_EVERY:-5}
 RETRIEVE_N=${MEMLOG_RETRIEVE_N:-5}
+# How Claude Code receives a due checkpoint:
+#   quiet (default) — stored at stop, delivered silently as context on the next prompt (nothing printed in the terminal)
+#   block           — the Stop hook holds the agent for one more turn; Claude Code prints the request as a "hook error"
+CHECKPOINT_MODE=${MEMLOG_CHECKPOINT_MODE:-quiet}
 MODE="$1"
 
 # ---------- project context ----------
@@ -36,6 +40,13 @@ set_project() {  # $1 = cwd
   TODAY=$(date +%F); NOW=$(date +%H:%M)
   DAYLOG="$LOG/$TODAY.md"
   MARK="$LOG/.summary-mark"
+  PENDING="$MEM/.checkpoint-pending.md"
+}
+
+# Print and clear a stored checkpoint request, if any.
+take_pending() {
+  [ -f "$PENDING" ] || return 0
+  cat "$PENDING"; rm -f "$PENDING"
 }
 
 ensure_index() {
@@ -106,8 +117,9 @@ checkpoint_if_due() {
   cmds=$(printf '%s\n' "$window" | grep -E '^- [0-9:]+ bash ' | sed -E 's/^- [0-9:]+ bash //' | awk '!seen[$0]++' | head -8 | awk '{ printf "%s%s", (NR>1 ? "; " : ""), $0 }')
   nfiles=$(printf '%s' "$files" | awk -F', ' '{print ($0=="")?0:NF}')
   printf '\n### checkpoint %s — %s change(s): %s\n\n' "$NOW" "$((edits - last))" "${files:-commands only}" >> "$DAYLOG"
-  cat <<EOF
-Memory checkpoint: $((edits - last)) changes since the last one, touching $nfiles file(s). Do two small writes, then stop (do not repeat the work).
+  # printed for immediate delivery AND stored for deferred delivery (quiet mode / next session)
+  { cat <<EOF
+Memory checkpoint: $((edits - last)) changes since the last one, touching $nfiles file(s). Do two small writes first (do not repeat the work).
 
 Files changed in this window: ${files:-none}
 Commands run: ${cmds:-none}
@@ -136,6 +148,7 @@ Use only the types that apply; skip trivial edits. Each line under 60 words and 
 
 If any fact is durable (a decision, a convention, a user preference), also save it as its own memory file and add it to $MEM/MEMORY.md.
 EOF
+  } | tee "$PENDING"
 }
 
 setup_hint() {
@@ -160,18 +173,25 @@ esac
 case "$MODE" in
   start)
     python3 "$IDX" touch "$SLUG" "$CWD" >/dev/null 2>&1
-    L=$(last_entry); HINT=$(setup_hint)
-    [ -z "$L" ] && [ -z "$HINT" ] && exit 0
+    L=$(last_entry); HINT=$(setup_hint); PEND=$(take_pending)
+    [ -z "$L" ] && [ -z "$HINT" ] && [ -z "$PEND" ] && exit 0
     inject SessionStart "${HINT:+$HINT
+}${PEND:+A memory checkpoint from the previous session was never written. Reconstruct it from the day log in $LOG and the repository, then continue:
+$PEND
+
 }${L:+Where this project was left (latest session entry from the memory index):
 $L}"
     ;;
   prompt)
     P=$(printf '%s' "$INPUT" | jq -r '.prompt // empty')
     log_prompt "$P" || exit 0
-    HITS=$(retrieve "$P"); [ -z "$HITS" ] && exit 0
-    inject UserPromptSubmit "Relevant past memory for this project (from the local index; verify against the repo before relying on it):
-$HITS"
+    HITS=$(retrieve "$P"); PEND=$(take_pending)
+    [ -z "$HITS" ] && [ -z "$PEND" ] && exit 0
+    inject UserPromptSubmit "${PEND:+Before handling the request below, do this pending memory checkpoint (it covers your earlier work in this project); then continue with the request:
+$PEND
+
+}${HITS:+Relevant past memory for this project (from the local index; verify against the repo before relying on it):
+$HITS}"
     ;;
   tool)
     T=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
@@ -182,9 +202,14 @@ $HITS"
     ;;
   stop)
     sync_all
-    [ "$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false')" = "true" ] && exit 0
-    R=$(checkpoint_if_due); [ -z "$R" ] && exit 0
-    jq -n --arg r "$R" '{decision:"block", reason:$r}'
+    if [ "$CHECKPOINT_MODE" = "block" ]; then
+      [ "$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false')" = "true" ] && exit 0
+      R=$(checkpoint_if_due); [ -z "$R" ] && exit 0
+      rm -f "$PENDING"                       # delivered now, not later
+      jq -n --arg r "$R" '{decision:"block", reason:$r}'
+    else
+      checkpoint_if_due >/dev/null           # quiet: stored in $PENDING, delivered on the next prompt
+    fi
     ;;
 
   # ---------- core modes (arguments) ----------
@@ -194,7 +219,9 @@ $HITS"
   retrieve) set_project "$2"; retrieve "$3" "${4:-$RETRIEVE_N}" ;;
   last)     set_project "$2"; python3 "$IDX" touch "$SLUG" "$CWD" >/dev/null 2>&1; last_entry ;;
   sync)     set_project "$2"; sync_all ;;
-  due)      set_project "$2"; sync_all; checkpoint_if_due ;;
+  due)      set_project "$2"; sync_all
+            R=$(checkpoint_if_due)
+            if [ -n "$R" ]; then printf '%s\n' "$R"; rm -f "$PENDING"; else take_pending; fi ;;   # caller delivers it
 
   # ---------- CLI ----------
   search)   set_project "$PWD"; python3 "$IDX" query "$SLUG" "$2" "${3:-10}" ;;

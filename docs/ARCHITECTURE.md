@@ -76,7 +76,7 @@ cost of one short turn per N changes. Adapters deliver the request differently:
 
 | Adapter | Delivery |
 |---|---|
-| Claude Code | `Stop` hook returns `decision: block` with the instructions; the agent continues for one turn |
+| Claude Code | quiet (default): the `Stop` hook stores the request and the next `UserPromptSubmit` injects it as context, so nothing is printed in the terminal; `MEMLOG_CHECKPOINT_MODE=block` instead holds the agent at stop (Claude Code prints the request as a "hook error") |
 | Cursor | `stop` hook returns `followup_message` |
 | Gemini CLI | `AfterAgent` hook returns `decision: block` |
 | OpenCode | plugin sends a follow-up prompt on `session.idle` |
