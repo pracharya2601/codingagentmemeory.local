@@ -156,6 +156,39 @@ Projects are matched by name to your `~/.claude/projects/*` folders. For names t
 `MEMINDEX_SEED_OVERRIDES='{"claude-mem-project-name": "-Users-you-path-slug"}'` and rerun; the seed is
 idempotent.
 
+## Giving the viewer a friendly address
+
+The viewer listens on `http://127.0.0.1:37701/` and does not care what hostname you use to reach it, so a
+friendly name is purely a resolver question. Three options, from zero setup to nicest:
+
+**1. `*.localhost` — no setup, Chromium browsers only.** Chrome, Edge, Brave and Arc resolve any
+`*.localhost` name to loopback on their own. Open `http://memory.localhost:37701/` and it works. Safari and
+`curl` use the system resolver, which does not do this, so this option is browser-specific.
+
+**2. `/etc/hosts` — one line, any browser, any name.** Pick a name that no real domain will ever use. Avoid
+`.local`, which macOS reserves for Bonjour; `.test` is the reserved TLD for exactly this purpose.
+
+```bash
+echo "127.0.0.1 memory.test" | sudo tee -a /etc/hosts
+```
+
+Then `http://memory.test:37701/`. Works on macOS and Linux; on Windows edit
+`C:\Windows\System32\drivers\etc\hosts` as administrator.
+
+**3. Drop the port — a reverse proxy.** Ports below 1024 need root, so instead of running the viewer as root,
+put a proxy in front. Caddy is the least effort and also gives you HTTPS with a locally trusted certificate:
+
+```bash
+brew install caddy            # or your package manager
+sudo caddy reverse-proxy --from memory.test --to 127.0.0.1:37701
+```
+
+With the `/etc/hosts` line from option 2 in place, `https://memory.test/` now serves the viewer. Caddy will ask
+once to install its local CA. To make it permanent, write the same rule to a Caddyfile and run Caddy as a
+service (`brew services start caddy`).
+
+The viewer still binds only to 127.0.0.1 in every option; nothing here exposes it to your network.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
