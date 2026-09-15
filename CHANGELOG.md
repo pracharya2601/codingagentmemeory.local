@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 — 2026-09-15
+
+- Viewer is single-instance: a second `ui` start detects the running viewer and opens it instead of binding
+  the next port. With the port-80 forward installed the check goes through port 80, because the macOS
+  loopback redirect makes direct connections to the target port unreliable after the first one.
+- Viewer prints only the portless address once the forward is installed, serves before publishing its name
+  so startup takes about a second, and no longer holds a process-wide lock across requests.
+
 ## 0.2.1 — 2026-09-15
 
 - Checkpoints are now delivered quietly by default: the Stop hook stores the request and the next prompt

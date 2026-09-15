@@ -1,6 +1,6 @@
 {
   "name": "local-memory",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Persistent, searchable memory for coding agents that runs entirely on your subscription: hooks log what happens, your own session writes typed observations at checkpoints, and a local SQLite index (BM25 + optional vectors) injects only the relevant past into each prompt. No background workers, no API keys. Adapters for Cursor, Codex, Gemini CLI, OpenCode, Pi.",
   "author": {
     "name": "Prakash Acharya"

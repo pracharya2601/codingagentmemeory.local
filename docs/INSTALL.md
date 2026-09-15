@@ -202,6 +202,11 @@ bash scripts/friendly-url.sh disable     # remove it, including the boot job
 step. The viewer keeps running as your user on 37701; only the kernel redirect touches port 80. On Windows,
 normal users may bind port 80 when nothing else uses it, so `bash scripts/memlog.sh ui 80` is enough there.
 
+Once the forward is installed, use the portless address and forget about `:37701`. A quirk of the loopback
+redirect on macOS is that direct connections to the target port only succeed once, so the viewer treats port
+80 as the canonical path: it prints only the portless URL, and a second `ui` start detects the running
+instance through port 80 and reuses it instead of opening another port.
+
 ### HTTPS
 
 Not provided. A local certificate needs a locally trusted CA, which every browser would have to be told

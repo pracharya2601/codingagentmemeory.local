@@ -130,7 +130,7 @@ def main():
         method, id_, params = req.get("method"), req.get("id"), req.get("params") or {}
         if method == "initialize":
             reply(id_, {"protocolVersion": params.get("protocolVersion", PROTOCOL), "capabilities": {"tools": {}},
-                        "serverInfo": {"name": "local-memory", "version": "0.2.1"},
+                        "serverInfo": {"name": "local-memory", "version": "0.2.2"},
                         "instructions": "Call memory_context at the start of each turn with the user's request. If it reports a checkpoint due, call memory_checkpoint before finishing."})
         elif method == "notifications/initialized" or method.startswith("notifications/"):
             continue

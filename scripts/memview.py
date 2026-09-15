@@ -39,12 +39,14 @@ def publish_names(port):
     out = []
     for name in NAMES:
         how = None
-        if resolves(name, port):
-            how = "already resolves"
-        elif platform.system() == "Darwin" and shutil.which("dns-sd") and name.endswith(".local"):
+        # on macOS publish straight away: a lookup for an unpublished .local name blocks ~5 s before failing
+        if platform.system() == "Darwin" and shutil.which("dns-sd") and name.endswith(".local"):
             p = subprocess.Popen(["dns-sd", "-P", name.rsplit(".", 1)[0], "_http._tcp", "local", str(port), name, "127.0.0.1"],
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            _publishers.append(p); how = "bonjour" if resolves(name, port, tries=10) else None
+            _publishers.append(p); how = "bonjour"       # registration lands within ~1 s; not verified here because a
+                                                         # lookup that misses blocks ~5 s and would delay startup
+        elif resolves(name, port):
+            how = "already resolves"                      # hosts file, or published by something else
         elif platform.system() == "Linux" and shutil.which("avahi-publish") and name.endswith(".local"):
             p = subprocess.Popen(["avahi-publish", "-a", "-R", name, "127.0.0.1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             _publishers.append(p); how = "avahi" if resolves(name, port, tries=10) else None
@@ -62,9 +64,9 @@ def row(r):
     return {"id": _id, "project": project, "ts": ts, "kind": kind, "title": title, "body": m.clean_body(body)}
 
 def api(path, q):
-    con = m.db()
+    con = m.db()   # one SQLite connection per request; SQLite serialises writers itself, no process-wide lock needed
     g = lambda k, d=None: (q.get(k) or [d])[0]
-    with _lock:
+    if True:
         if path == "/api/projects":
             return [{"slug": s, "path": p, "entries": n, "exists": ex} for s, p, n, ex in m.project_rows(con)]
         if path == "/api/kinds":
@@ -201,28 +203,62 @@ class H(BaseHTTPRequestHandler):
         else:
             self.send_response(404); self.end_headers(); return
         self.send_response(200); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store"); self.end_headers(); self.wfile.write(body)
+        self.send_header("Cache-Control", "no-store"); self.send_header("X-Local-Memory", "viewer"); self.end_headers(); self.wfile.write(body)
+
+def ours(port, timeout=1.5, tries=1):
+    """True if a local-memory viewer already answers on this port (identified by its response header)."""
+    import urllib.request
+    for _ in range(tries):
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/projects", timeout=timeout) as r:
+                return r.headers.get("X-Local-Memory") == "viewer"
+        except Exception:
+            time.sleep(0.3)
+    return False
+
+def portless_configured():
+    """True if the port-80 forward from scripts/friendly-url.sh is installed (checked on disk, no network round trip)."""
+    if os.environ.get("MEMVIEW_PORTLESS") == "1": return True
+    return os.path.exists("/etc/pf.anchors/com.local-memory")   # macOS; Linux/Windows users set MEMVIEW_PORTLESS=1
+
+def friendly_urls(port):
+    """[(url, how)] for every name that resolves; portless when the port-80 forward is configured."""
+    portless = port == 80 or portless_configured()
+    out = []
+    for name, how in publish_names(port):
+        if how:
+            out.append((f"http://{name}/" if portless else f"http://{name}:{port}/", how))
+        else:
+            print(f"note: {name} does not resolve here; add '127.0.0.1 {name}' to your hosts file to use it", file=sys.stderr)
+    return out
 
 if __name__ == "__main__":
+    # Single instance: if a viewer already answers, reuse it instead of taking another port.
+    # With the port-80 forward installed, probe through port 80: the pf loopback redirect makes direct
+    # connections to the target port unreliable (only the first one succeeds), so port 80 is the canonical path.
+    portless = portless_configured()
+    if ours(80) if portless else ours(PORT):   # a refused connection returns instantly; a live viewer answers in ms
+        name = next((n for n in NAMES if n.endswith(".local")), None)
+        url = (f"http://{name}/" if portless else f"http://{name}:{PORT}/") if name and resolves(name, PORT) else (f"http://127.0.0.1/" if portless else f"http://127.0.0.1:{PORT}/")
+        print(f"memory viewer already running at {url}", flush=True)
+        webbrowser.open(url); sys.exit(0)
     srv = None
-    for port in range(PORT, PORT + 20):   # if the requested port is busy, take the next free one
+    for port in range(PORT, PORT + 20):   # port held by something else: take the next free one
         try:
             srv = ThreadingHTTPServer(("127.0.0.1", port), H); break
         except OSError:
             print(f"port {port} is in use by another program; trying {port + 1}", file=sys.stderr)
     if srv is None:
         sys.exit(f"could not bind any port in {PORT}..{PORT + 19}")
-    url = f"http://127.0.0.1:{port}/"
+    # serve immediately (so a concurrent start can detect us), then publish names and announce
+    t = threading.Thread(target=srv.serve_forever, daemon=True); t.start()
+    url = "http://127.0.0.1/" if (portless and port == PORT) else f"http://127.0.0.1:{port}/"
     open_url = url
-    for name, how in publish_names(port):
-        if how:
-            friendly = f"http://{name}/" if port == 80 else f"http://{name}:{port}/"
-            print(f"memory viewer at {friendly}  ({how})")
-            if open_url == url: open_url = friendly
-        else:
-            print(f"note: {name} does not resolve here; add '127.0.0.1 {name}' to your hosts file to use it", file=sys.stderr)
-    print(f"memory viewer at {url}  (Ctrl-C to stop)")
-    threading.Timer(0.4, lambda: webbrowser.open(open_url)).start()
-    try: srv.serve_forever()
-    except KeyboardInterrupt: pass
+    for friendly, how in friendly_urls(port):
+        print(f"memory viewer at {friendly}  ({how})")
+        if open_url == url: open_url = friendly
+    print(f"memory viewer at {url}  (Ctrl-C to stop)", flush=True)
+    threading.Timer(1.5, lambda: webbrowser.open(open_url)).start()
+    try: t.join()
+    except KeyboardInterrupt: srv.shutdown()
     finally: srv.server_close()
