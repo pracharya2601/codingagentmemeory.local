@@ -193,12 +193,14 @@ Port 80 needs administrator rights on macOS and Linux, so this is the one step t
 Rather than run the viewer as root, forward port 80 to the viewer's port:
 
 ```bash
-bash scripts/friendly-url.sh enable      # macOS: pf redirect 80 -> 37701; Linux: iptables REDIRECT
-bash scripts/friendly-url.sh disable     # remove it
+bash scripts/friendly-url.sh install     # macOS: forward 80 -> 37701 now and at every boot (one password prompt)
+bash scripts/friendly-url.sh enable      # macOS/Linux: same, but only until reboot
+bash scripts/friendly-url.sh disable     # remove it, including the boot job
 ```
 
-On macOS the rule lasts until reboot. On Windows, normal users may bind port 80 when nothing else uses it, so
-`bash scripts/memlog.sh ui 80` is enough there.
+`install` writes a packet-filter anchor file and a LaunchDaemon that reloads it at boot, so it's a one-time
+step. The viewer keeps running as your user on 37701; only the kernel redirect touches port 80. On Windows,
+normal users may bind port 80 when nothing else uses it, so `bash scripts/memlog.sh ui 80` is enough there.
 
 ### HTTPS
 

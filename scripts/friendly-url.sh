@@ -1,33 +1,64 @@
 #!/bin/bash
-# friendly-url.sh — make the viewer reachable without a port number, e.g. http://codingagentmemory.local/
+# friendly-url.sh — make the viewer reachable without a port number: http://codingagentmemory.local/
 #
-#   friendly-url.sh enable  [port]     forward port 80 -> viewer port (default 37701); asks for sudo once
-#   friendly-url.sh disable            remove the forwarding rule
+#   friendly-url.sh install [port]     macOS: forward 80 -> viewer port now AND at every boot (one sudo prompt)
+#   friendly-url.sh enable  [port]     forward 80 -> viewer port until reboot (macOS pf / Linux iptables)
+#   friendly-url.sh disable            remove the forwarding (and the boot job if installed)
 #   friendly-url.sh status
 #   friendly-url.sh windows            print the steps for Windows (hosts file + WSL)
 #
 # The name itself needs no setup on macOS: the viewer publishes *.local names through Bonjour while it runs.
-# On Linux it uses Avahi if installed. This script only handles the port, which needs root on every OS.
+# On Linux it uses Avahi if installed. This script only handles port 80, which needs root on macOS and Linux.
+set -u
 ACTION="${1:-status}"; PORT="${2:-37701}"; ANCHOR="com.local-memory"
 OS=$(uname -s)
+RULE="rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port $PORT"
+ANCHOR_FILE="/etc/pf.anchors/$ANCHOR"
+PLIST="/Library/LaunchDaemons/$ANCHOR.pf.plist"
+
+mac_load_now() {
+  printf '%s\n' "$RULE" | sudo pfctl -q -a "$ANCHOR" -f - && sudo pfctl -q -e 2>/dev/null
+  echo "forwarding 127.0.0.1:80 -> 127.0.0.1:$PORT is active"
+}
 
 case "$OS:$ACTION" in
   Darwin:enable)
-    echo "Forwarding 127.0.0.1:80 -> 127.0.0.1:$PORT with the packet filter (anchor $ANCHOR). Needs sudo."
-    printf 'rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port %s\n' "$PORT" | sudo pfctl -a "$ANCHOR" -f - 2>/dev/null
-    sudo pfctl -e 2>/dev/null; sudo pfctl -a "$ANCHOR" -s nat 2>/dev/null
-    echo "Done. Start the viewer (bash memlog.sh ui) and open http://codingagentmemory.local/"
-    echo "This rule lasts until reboot; run 'friendly-url.sh enable' again after restarting, or add it to a launchd job."
+    echo "Needs sudo once."; mac_load_now
+    echo "Open http://codingagentmemory.local/ while the viewer runs. Lasts until reboot; use 'install' to make it permanent."
+    ;;
+  Darwin:install)
+    echo "Needs sudo once. Installs a pf anchor file and a LaunchDaemon that reloads it at boot."
+    printf '%s\n' "$RULE" | sudo tee "$ANCHOR_FILE" >/dev/null
+    sudo tee "$PLIST" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$ANCHOR.pf</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/sh</string><string>-c</string>
+    <string>/sbin/pfctl -q -a $ANCHOR -f $ANCHOR_FILE; /sbin/pfctl -q -e</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+</dict></plist>
+EOF
+    sudo chown root:wheel "$PLIST" "$ANCHOR_FILE"; sudo chmod 644 "$PLIST" "$ANCHOR_FILE"
+    sudo launchctl bootout system "$PLIST" 2>/dev/null; sudo launchctl bootstrap system "$PLIST"
+    mac_load_now
+    echo "Installed. Survives reboots. Remove with: bash $0 disable"
     ;;
   Darwin:disable)
-    sudo pfctl -a "$ANCHOR" -F all 2>/dev/null && echo "forwarding removed"
+    sudo pfctl -q -a "$ANCHOR" -F all 2>/dev/null && echo "forwarding removed"
+    if [ -f "$PLIST" ]; then sudo launchctl bootout system "$PLIST" 2>/dev/null; sudo rm -f "$PLIST" "$ANCHOR_FILE"; echo "boot job removed"; fi
     ;;
   Darwin:status)
-    if sudo -n true 2>/dev/null; then sudo pfctl -a "$ANCHOR" -s nat 2>/dev/null || echo "no forwarding rule"; else echo "run with sudo to inspect: sudo pfctl -a $ANCHOR -s nat"; fi
+    [ -f "$PLIST" ] && echo "boot job: installed ($PLIST)" || echo "boot job: not installed"
+    if sudo -n true 2>/dev/null; then sudo pfctl -a "$ANCHOR" -s nat 2>/dev/null || echo "no active forwarding rule"
+    else echo "active rule: run 'sudo pfctl -a $ANCHOR -s nat' to check"; fi
     ;;
-  Linux:enable)
+  Linux:enable|Linux:install)
     echo "Redirecting port 80 -> $PORT with iptables (needs sudo)."
     sudo iptables -t nat -A OUTPUT -o lo -p tcp --dport 80 -j REDIRECT --to-port "$PORT" && echo "Done. Open http://codingagentmemory.local/ (needs avahi-utils for the name, or a hosts line)."
+    [ "$ACTION" = install ] && echo "To persist across reboots, save the rule with your distro's iptables-persistent / nftables tooling."
     ;;
   Linux:disable)
     sudo iptables -t nat -D OUTPUT -o lo -p tcp --dport 80 -j REDIRECT --to-port "$PORT" && echo "redirect removed"
@@ -35,19 +66,18 @@ case "$OS:$ACTION" in
   Linux:status)
     sudo iptables -t nat -L OUTPUT -n 2>/dev/null | grep -E "REDIRECT.*dpt:80" || echo "no redirect rule"
     ;;
-  *:windows|Darwin:windows|Linux:windows)
+  *:windows)
     cat <<'EOF'
 Windows (viewer running under WSL2 or Git Bash):
   1. Open Notepad as Administrator and add this line to C:\Windows\System32\drivers\etc\hosts
          127.0.0.1 codingagentmemory.local
      (Windows resolves .local through the hosts file first, so no Bonjour is needed.)
-  2. Start the viewer:   bash scripts/memlog.sh ui
-     Under WSL2, Windows forwards localhost ports automatically, so the browser on Windows reaches it.
-  3. Open http://codingagentmemory.local:37701/
-  4. To drop the port, run the viewer on 80 (Windows allows this for normal users when nothing else
-     uses the port):   bash scripts/memlog.sh ui 80     then open http://codingagentmemory.local/
+  2. Start the viewer on port 80 (allowed for normal users when nothing else uses it):
+         bash scripts/memlog.sh ui 80
+     Under WSL2, Windows forwards localhost ports automatically, so the Windows browser reaches it.
+  3. Open http://codingagentmemory.local/
 EOF
     ;;
   *)
-    echo "unsupported: $OS $ACTION"; sed -n '2,10p' "$0"; exit 1 ;;
+    echo "unsupported: $OS $ACTION"; sed -n '2,11p' "$0"; exit 1 ;;
 esac
