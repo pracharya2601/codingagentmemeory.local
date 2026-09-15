@@ -1,0 +1,15 @@
+{
+  "name": "local-memory",
+  "description": "Subscription-only persistent memory for Claude Code: hook capture, checkpoint observations, local SQLite hybrid search, browser viewer.",
+  "owner": {
+    "name": "Prakash Acharya"
+  },
+  "plugins": [
+    {
+      "name": "local-memory",
+      "source": "./",
+      "description": "Persistent, searchable memory for Claude Code on your subscription only: hook-based capture, checkpoint observations, local SQLite hybrid search, on-demand browser viewer.",
+      "version": "0.1.0"
+    }
+  ]
+}
